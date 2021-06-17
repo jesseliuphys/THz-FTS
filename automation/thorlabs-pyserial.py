@@ -79,7 +79,15 @@ with open(fout_name, 'w') as f_out:
     unpacker = apt.Unpacker(port)
     
     # Get power readings from Gentec detector after stage motor has stopped and stabilized
-    myValues = res.getValues(2)
+    myValues = res.getValues(1)
+
+    # Retry a number of times if the value queried is invalid = -1
+    nRetry = 10
+    for it in range(nRetry):
+      if myValues[0][4] == -1:
+        myValues = res.getValues(1)
+      else:
+        break
     
     # Initialize output variables
     gentec_time, gentec_power, position_count, position_mm = -1, -1, -1, -1

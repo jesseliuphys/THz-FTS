@@ -77,6 +77,14 @@ class Gentec:
 
     def getValues(self,nSamples=1):
         startErr = self.send("STR1")
+        # If we get an error in the query, retry a number of times
+        nRetry = 10
+        for it in range(nRetry):
+            if(startErr == "ERR"):
+                startErr = self.send("STR1")
+            else:
+                break
+
         if(startErr == "ERR"):
             print("Error: Couldn't start data stream")
         else:
@@ -100,9 +108,10 @@ class Gentec:
                 print('getValues: rStr = {0}'.format(rStr))
             try:
                 counts = int(rStr[0:4],16)
+                freq   = 1e6/float(counts)
             except ValueError:
                 counts = -1 # If Gentec not returning values, set to -1 for error handling
-            freq   = 1e6/float(counts)
+                freq   = -1
             try: 
                 pADC   = int(rStr[5:9],16)
                 power  = (float(pADC)/3276.0) * self.scale
