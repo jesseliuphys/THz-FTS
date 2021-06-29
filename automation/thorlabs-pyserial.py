@@ -1,26 +1,42 @@
 import thorlabs_apt_protocol as apt
 import serial, time, datetime
-sys.path.append('./devices/')
+import matplotlib.pyplot as plt
 from gentec import *
 
 #------------------------------------------------------------
-# User configuration
+# User configuration: global settings (unchanged btwn runs)
 #------------------------------------------------------------
-verbose = False
+# Thorlabs Z8-812 stage encoder: counts to displacement conversion  
+counts_per_mm = 34303 # units [1/mm]
+
+verbose       = False
+realtime_plot = True # plot power vs position in realtime
 
 # Gentec and Thorlabs COM port (see Windows Device Manager)
 gentecPort   = "COM4"
 thorlabsPort = "COM3"
 
+# Time to pause between each step of stage
+sleep_btwn_steps = 0.5
+
+#------------------------------------------------------------
+# User configuration: per run settings
+#------------------------------------------------------------
 # Stage movement steps: (start, stop, step-size count)
-list_x = range(0, 4000, 1) 
+stop_step = 60000 # encoder counts
+step_size = 10 # encoder counts
+list_x    = range(0, stop_step, step_size) 
+
+# The zero offset in mm after homeing stage
+offset_in_mm = 6.5 
 
 # File output name
-fout_name = 'laser_automate_data_{0}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"))
+fout_name = 'IR-Si253_10V_1p5A_totalsteps60000_stepsize10_automate_data_{0}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"))
 
 #------------------------------------------------------------
 # Intitialization
 #------------------------------------------------------------
+
 # Initialise and connect to Gentec detector 
 print('\n--------------------------------')
 print('Inititalizing Gentec detector connection via port {0}'.format(gentecPort))
@@ -39,22 +55,23 @@ port.reset_input_buffer()
 port.reset_output_buffer()
 port.rts = False
 
-# Counts to displacement conversion for Thorlabs Z8 encoder, units [1/mm]
-counts_per_mm = 34303 
-
-# Initial offset in mirror displacement
-offset = int(7.1*counts_per_mm)
-
 # Collect Thorlabs device metadata
 port.write(apt.hw_req_info(source=1, dest=0x50))
 
-print('Displacement offset: {0}'.format(offset))
+# Initial offset in mirror displacement
+offset = int( offset_in_mm * counts_per_mm )
+print('Displacement zero offset: {0}'.format(offset))
+
+# Store list of values for realtime plotting
+xval = []
+yval = []
 
 #------------------------------------------------------------
 # Move Thorlabs stage
 # Readout Thorlabs stage position and Gentec detector power
 # Save readings to file output
 #------------------------------------------------------------
+
 with open(fout_name, 'w') as f_out:
   # Write file header
   f_out.write('Datetime [dd-mm-YYYY hh:mm:ss.ff],Thorlabs counter,Thorlabs position [mm],Gentec power [Watts]\n')
@@ -70,7 +87,7 @@ with open(fout_name, 'w') as f_out:
     port.write(apt.mot_move_absolute(source=1, dest=0x50, chan_ident=1, position=xi))
     
     # Pause a little for mechanically stabilize actuator
-    time.sleep(0.5)
+    time.sleep(sleep_btwn_steps)
     
     # Get device absolute position counter
     port.write(apt.mot_req_poscounter(source=1, dest=0x50, chan_ident=1))
@@ -80,11 +97,12 @@ with open(fout_name, 'w') as f_out:
     
     # Get power readings from Gentec detector after stage motor has stopped and stabilized
     myValues = res.getValues(1)
-
+    
     # Retry a number of times if the value queried is invalid = -1
     nRetry = 10
     for it in range(nRetry):
-      if myValues[0][4] == -1:
+      time.sleep(0.1)
+      if myValues[0][4] <= 0.:
         myValues = res.getValues(1)
       else:
         break
@@ -113,3 +131,10 @@ with open(fout_name, 'w') as f_out:
     str_out = '{0},{1},{2},{3}'.format(gentec_time, position_count, position_mm, gentec_power)
     print(str_out)
     f_out.write(str_out+'\n')
+
+    # Use matplotlib to visualize data in real time
+    if realtime_plot:
+      xval.append(position_mm)
+      yval.append(gentec_power)
+      plt.plot(xval, yval)
+      plt.pause(0.01)
