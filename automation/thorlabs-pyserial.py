@@ -1,6 +1,7 @@
 import thorlabs_apt_protocol as apt
 import serial, time, datetime
 import matplotlib.pyplot as plt
+import numpy as np
 from gentec import *
 
 #------------------------------------------------------------
@@ -17,21 +18,22 @@ gentecPort   = "COM4"
 thorlabsPort = "COM3"
 
 # Time to pause between each step of stage
-sleep_btwn_steps = 0.5
+sleep_btwn_steps = 0.2
 
 #------------------------------------------------------------
 # User configuration: per run settings
 #------------------------------------------------------------
 # Stage movement steps: (start, stop, step-size count)
-stop_step = 60000 # encoder counts
-step_size = 10 # encoder counts
+stop_step = 1000 # encoder counts
+step_size = 1 # encoder counts
 list_x    = range(0, stop_step, step_size) 
 
 # The zero offset in mm after homeing stage
 offset_in_mm = 6.5 
 
 # File output name
-fout_name = 'IR-Si253_10V_1p5A_totalsteps60000_stepsize10_automate_data_{0}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"))
+#fout_name = 'IR-Si253_10V_1p5A_totalsteps60000_stepsize10_automate_data_{0}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"))
+fout_name = 'laser_automate_data_{0}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"))
 
 #------------------------------------------------------------
 # Intitialization
@@ -66,11 +68,15 @@ print('Displacement zero offset: {0}'.format(offset))
 xval = []
 yval = []
 
+# Initialize matplotlib
+fig, (ax1, ax2) = plt.subplots(2)
+
 #------------------------------------------------------------
 # Move Thorlabs stage
 # Readout Thorlabs stage position and Gentec detector power
 # Save readings to file output
 #------------------------------------------------------------
+
 
 with open(fout_name, 'w') as f_out:
   # Write file header
@@ -78,7 +84,7 @@ with open(fout_name, 'w') as f_out:
   print('\nGentec datetime [dd-mm-YYYY hh:mm:ss.ff],Thorlabs counter,Thorlabs position [mm],Gentec power [Watts]')
 
   # Increment count positions to move stage
-  for x in list_x:
+  for i, x in enumerate(list_x):
     xi = offset + x
     if verbose: 
       print('\n{0}: move to position {1}'.format(datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S.%f"), xi))
@@ -101,7 +107,7 @@ with open(fout_name, 'w') as f_out:
     # Retry a number of times if the value queried is invalid = -1
     nRetry = 10
     for it in range(nRetry):
-      time.sleep(0.1)
+      time.sleep(0.02)
       if myValues[0][4] <= 0.:
         myValues = res.getValues(1)
       else:
@@ -133,8 +139,37 @@ with open(fout_name, 'w') as f_out:
     f_out.write(str_out+'\n')
 
     # Use matplotlib to visualize data in real time
-    if realtime_plot:
+    if realtime_plot and i > 1:
+
+      # Append positions and powers to a list
       xval.append(position_mm)
       yval.append(gentec_power)
-      plt.plot(xval, yval)
-      plt.pause(0.01)
+
+      # Plot the power vs mirror position
+      ax1.plot(xval, yval, color='tab:blue')
+      ax1.set(xlabel='Mirror position [mm]', ylabel='Power [Watts]')
+
+      # Set colours of psd lines (it plots one per step right now)
+      if i < 100:
+        mycolor=(0.3, 0.3, 0.3, 0.1)
+      elif i >= 100 and i < 200:
+        mycolor='#1d91c040'
+      else:
+        mycolor='#ec701460'
+
+      # sample frequency = (1/2) * (speed of light / mirror step size)
+      fs = 1e4/2. # THz
+      # Use matplotlib to compute power spectra density on lower plot
+      f, Pxx = ax2.psd(yval, Fs=fs, color=mycolor) 
+
+      # Beautify lower plot
+      ax2.set_ylim(-170, -100)
+      ax2.set_xlim(0, 800)
+      ax2.grid(False)
+      ax2.set(xlabel='Frequency [THz]', ylabel='Power spectral density [$W^2$/Hz]')
+      plt.tight_layout()
+
+      # Keep updating plot during each step
+      plt.pause(0.02)
+
+plt.show()
