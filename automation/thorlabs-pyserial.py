@@ -1,8 +1,9 @@
 import thorlabs_apt_protocol as apt
-import serial, time, datetime
+import serial, time, datetime, math
 import matplotlib.pyplot as plt
 import numpy as np
 from gentec import *
+from scipy import signal
 
 #------------------------------------------------------------
 # User configuration: global settings (unchanged btwn runs)
@@ -18,7 +19,7 @@ gentecPort   = "COM4"
 thorlabsPort = "COM3"
 
 # Time to pause between each step of stage
-sleep_btwn_steps = 0.2
+sleep_btwn_steps = 0.1
 
 #------------------------------------------------------------
 # User configuration: per run settings
@@ -81,7 +82,7 @@ fig, (ax1, ax2) = plt.subplots(2)
 with open(fout_name, 'w') as f_out:
   # Write file header
   f_out.write('Datetime [dd-mm-YYYY hh:mm:ss.ff],Thorlabs counter,Thorlabs position [mm],Gentec power [Watts]\n')
-  print('\nGentec datetime [dd-mm-YYYY hh:mm:ss.ff],Thorlabs counter,Thorlabs position [mm],Gentec power [Watts]')
+  print('\nCount,Gentec datetime [dd-mm-YYYY hh:mm:ss.ff],Thorlabs counter,Thorlabs position [mm],Gentec power [Watts]')
 
   # Increment count positions to move stage
   for i, x in enumerate(list_x):
@@ -105,7 +106,7 @@ with open(fout_name, 'w') as f_out:
     myValues = res.getValues(1)
     
     # Retry a number of times if the value queried is invalid = -1
-    nRetry = 10
+    nRetry = 5
     for it in range(nRetry):
       time.sleep(0.02)
       if myValues[0][4] <= 0.:
@@ -135,14 +136,22 @@ with open(fout_name, 'w') as f_out:
 
     # Format string to write out to file
     str_out = '{0},{1},{2},{3}'.format(gentec_time, position_count, position_mm, gentec_power)
-    print(str_out)
     f_out.write(str_out+'\n')
+    
+    # Track progress in a counter
+    progress = '{0}/{1}'.format(i, len(list_x))
+    # Simulation with ideal sinsusoid
+    #kx = 15000*(position_mm-offset_in_mm)
+    #sin_power = 1e-4+5e-5*np.sin(kx)
+    #print(progress + ',' + str_out + ',{0:.5g},{1:.5g}'.format(kx,sin_power))
+    print(progress + ',' + str_out)
 
     # Use matplotlib to visualize data in real time
     if realtime_plot and i > 1:
 
       # Append positions and powers to a list
       xval.append(position_mm)
+      #yval.append(sin_power)
       yval.append(gentec_power)
 
       # Plot the power vs mirror position
@@ -160,13 +169,15 @@ with open(fout_name, 'w') as f_out:
       # sample frequency = (1/2) * (speed of light / mirror step size)
       fs = 1e4/2. # THz
       # Use matplotlib to compute power spectra density on lower plot
-      f, Pxx = ax2.psd(yval, Fs=fs, color=mycolor) 
+      #f, Pxx = ax2.psd(yval, Fs=fs, color=mycolor) 
+      f, Pxx = signal.periodogram(yval, fs=fs, window='parzen')
+      ax2.plot(f, np.sqrt(Pxx), color=mycolor)
 
       # Beautify lower plot
-      ax2.set_ylim(-170, -100)
+      #ax2.set_ylim(-170, -100)
       ax2.set_xlim(0, 800)
       ax2.grid(False)
-      ax2.set(xlabel='Frequency [THz]', ylabel='Power spectral density [$W^2$/Hz]')
+      ax2.set(xlabel='Frequency [THz]', ylabel='Power spectral density [$W$ Hz$^{-1/2}$]')
       plt.tight_layout()
 
       # Keep updating plot during each step
