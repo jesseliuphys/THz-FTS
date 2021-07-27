@@ -1,3 +1,20 @@
+'''
+
+Welcome to thorlabs-pyserial.py
+
+This script operates the BREAD spectrometer in Lab MCP 011:
+- moves the mirror on the motorized stage by regular steps,
+- queries the actual moved position, 
+- reads the Gentec detector power,
+- does basic plotting and periodogram of the data
+
+Configure various settings under "User configuration" inside script
+
+Run by typing:
+  python thorlabs-pyserial.py
+
+'''
+
 import thorlabs_apt_protocol as apt
 import serial, time, datetime, math
 import matplotlib.pyplot as plt
@@ -188,18 +205,21 @@ with open(fout_name, 'w') as f_out:
 
 # Find the difference between consecutive steps of the stage
 dx = np.diff(pval)
-dxfilt = [x for x in dx if x <10]
+# Filter the differences so it is not too much more than the step size
+dxfilt = [x for x in dx if x < step_size+10]
 
-# Save figure at the end
+# Save figure at the end after finishing data-taking
 if save_end_plot:
 
+  # Prepare the figure and subplots
   fig0, (ax0a, ax0b, ax0c) = plt.subplots(3)
   fig0.set_size_inches(7, 10)
-  # Plot the power vs mirror position
+
+  # Subplot 1: plot the power vs mirror position
   ax0a.plot(xval, yval, color='tab:blue')
   ax0a.set(xlabel='Mirror position [mm]', ylabel='Power [Watts]')
 
-  # Plot the final Fourier transformed psd
+  # Subplot 2: plot the final Fourier transformed psd
   fs = 1e4/(2.*step_size) # THz
   f, Pxx = signal.periodogram(yval, fs=fs, window='parzen') # scipy psd
   ax0b.plot(f, np.sqrt(Pxx), color='tab:orange')
@@ -207,11 +227,13 @@ if save_end_plot:
   ax0b.grid(False)
   ax0b.set(xlabel='Frequency [THz]', ylabel='Power spectral density [W Hz$^{-1/2}$]')
 
-  # Histogram the steps performed by the motorized stage
+  # Subplot 3: histogram the steps performed by the motorized stage
   ax0c.hist(dxfilt, bins=10)
   ax0c.set_xlim(0, 10)
   ax0c.set(xlabel='Motor step size', ylabel='Steps')
   plt.tight_layout()
+
+  # Save plots to file
   fig0.savefig(fout_name.replace('.csv', '.pdf'))
 
 plt.show()
