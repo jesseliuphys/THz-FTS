@@ -12,7 +12,8 @@ from scipy import signal
 counts_per_mm = 34303 # units [1/mm]
 
 verbose       = False
-realtime_plot = True # plot power vs position in realtime
+realtime_plot = False # plot power vs position in realtime
+save_end_plot = True # output pdf plot at end of scan
 
 # Gentec and Thorlabs COM port (see Windows Device Manager)
 gentecPort   = "COM4"
@@ -25,16 +26,16 @@ sleep_btwn_steps = 0.1
 # User configuration: per run settings
 #------------------------------------------------------------
 # Stage movement steps: (start, stop, step-size count)
-stop_step = 1000 # encoder counts
-step_size = 1 # encoder counts
+stop_step = 100000 # encoder counts
+step_size = 2 # encoder counts
 list_x    = range(0, stop_step, step_size) 
 
 # The zero offset in mm after homeing stage
-offset_in_mm = 6.5 
+offset_in_mm = 5.5
 
 # File output name
 #fout_name = 'IR-Si253_10V_1p5A_totalsteps60000_stepsize10_automate_data_{0}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"))
-fout_name = 'laser_automate_data_{0}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"))
+fout_name = 'laser_automate_data_{0}_nstep{1:.0f}_stepsize{2}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"), stop_step/float(step_size), stepsize)
 
 #------------------------------------------------------------
 # Intitialization
@@ -66,6 +67,7 @@ offset = int( offset_in_mm * counts_per_mm )
 print('Displacement zero offset: {0}'.format(offset))
 
 # Store list of values for realtime plotting
+pval = []
 xval = []
 yval = []
 
@@ -146,13 +148,14 @@ with open(fout_name, 'w') as f_out:
     #print(progress + ',' + str_out + ',{0:.5g},{1:.5g}'.format(kx,sin_power))
     print(progress + ',' + str_out)
 
+    pval.append(position_count)
+    # Append positions and powers to a list
+    xval.append(position_mm)
+    #yval.append(sin_power)
+    yval.append(gentec_power)
+
     # Use matplotlib to visualize data in real time
     if realtime_plot and i > 1:
-
-      # Append positions and powers to a list
-      xval.append(position_mm)
-      #yval.append(sin_power)
-      yval.append(gentec_power)
 
       # Plot the power vs mirror position
       ax1.plot(xval, yval, color='tab:blue')
@@ -167,10 +170,10 @@ with open(fout_name, 'w') as f_out:
         mycolor='#ec701460'
 
       # sample frequency = (1/2) * (speed of light / mirror step size)
-      fs = 1e4/2. # THz
+      fs = 1e4/(2.*step_size) # THz
       # Use matplotlib to compute power spectra density on lower plot
-      #f, Pxx = ax2.psd(yval, Fs=fs, color=mycolor) 
-      f, Pxx = signal.periodogram(yval, fs=fs, window='parzen')
+      #f, Pxx = ax2.psd(yval, Fs=fs, color=mycolor) # matplotlib psd
+      f, Pxx = signal.periodogram(yval, fs=fs, window='parzen') # scipy psd
       ax2.plot(f, np.sqrt(Pxx), color=mycolor)
 
       # Beautify lower plot
@@ -182,5 +185,33 @@ with open(fout_name, 'w') as f_out:
 
       # Keep updating plot during each step
       plt.pause(0.02)
+
+# Find the difference between consecutive steps of the stage
+dx = np.diff(pval)
+dxfilt = [x for x in dx if x <10]
+
+# Save figure at the end
+if save_end_plot:
+
+  fig0, (ax0a, ax0b, ax0c) = plt.subplots(3)
+  fig0.set_size_inches(7, 10)
+  # Plot the power vs mirror position
+  ax0a.plot(xval, yval, color='tab:blue')
+  ax0a.set(xlabel='Mirror position [mm]', ylabel='Power [Watts]')
+
+  # Plot the final Fourier transformed psd
+  fs = 1e4/(2.*step_size) # THz
+  f, Pxx = signal.periodogram(yval, fs=fs, window='parzen') # scipy psd
+  ax0b.plot(f, np.sqrt(Pxx), color='tab:orange')
+  ax0b.set_xlim(0, 800)
+  ax0b.grid(False)
+  ax0b.set(xlabel='Frequency [THz]', ylabel='Power spectral density [W Hz$^{-1/2}$]')
+
+  # Histogram the steps performed by the motorized stage
+  ax0c.hist(dxfilt, bins=10)
+  ax0c.set_xlim(0, 10)
+  ax0c.set(xlabel='Motor step size', ylabel='Steps')
+  plt.tight_layout()
+  fig0.savefig(fout_name.replace('.csv', '.pdf'))
 
 plt.show()
