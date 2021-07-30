@@ -43,16 +43,16 @@ sleep_btwn_steps = 0.1
 # User configuration: per run settings
 #------------------------------------------------------------
 # Stage movement steps: (start, stop, step-size count)
-stop_step = 100000 # encoder counts
+stop_step = 300000 # encoder counts
 step_size = 2 # encoder counts
 list_x    = range(0, stop_step, step_size) 
 
 # The zero offset in mm after homeing stage
-offset_in_mm = 5.5
+offset_in_mm = 2.5
 
 # File output name
 #fout_name = 'IR-Si253_10V_1p5A_totalsteps60000_stepsize10_automate_data_{0}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"))
-fout_name = 'laser_automate_data_{0}_nstep{1:.0f}_stepsize{2}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"), stop_step/float(step_size), stepsize)
+fout_name = 'laser_automate_data_{0}_nstep{1:.0f}_stepsize{2}.csv'.format(datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S"), stop_step/float(step_size), step_size)
 
 #------------------------------------------------------------
 # Intitialization
